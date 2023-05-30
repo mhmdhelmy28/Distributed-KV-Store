@@ -59,23 +59,31 @@ type LogEntry struct {
 
 // A Go object implementing a single Raft peer.
 type Raft struct {
-	mu           sync.Mutex          // Lock to protect shared access to this peer's state
-	peers        []*labrpc.ClientEnd // RPC end points of all peers
-	persister    *Persister          // Object to hold this peer's persisted state
-	me           int                 // this peer's index into peers[]
-	dead         int32               // set by Kill()
-	votedFor     int
-	votes        int
-	currentTerm  int
+	mu        sync.Mutex          // Lock to protect shared access to this peer's state
+	peers     []*labrpc.ClientEnd // RPC end points of all peers
+	persister *Persister          // Object to hold this peer's persisted state
+	me        int                 // this peer's index into peers[]
+	dead      int32               // set by Kill()
+	applyChan chan ApplyMsg
+
+	// persistent on all servers
+	votedFor    int
+	currentTerm int
+	logs        []LogEntry
+
+	// volatile
 	currentState State
-	logs         []LogEntry
-	nextIndex    []int
-	matchIndex   []int
+	votes        int
 	commitIndex  int
 	lastApplied  int
-	electionWin  chan bool
-	heartBeat    chan bool
-	applyChan    chan ApplyMsg
+
+	// only leaders can change these two
+	nextIndex  []int // maintaining the next index for each server to be sent
+	matchIndex []int // maintaining the highest replicated log that each server know
+
+	electionWin chan bool // to know if a server win the election
+	heartBeat   chan bool // a heartbeat to be sent by followers as a sign of being alive
+
 	// Your data here (2A, 2B, 2C).
 	// Look at the paper's Figure 2 for a description of what
 	// state a Raft server must maintain.
@@ -120,6 +128,17 @@ func (rf *Raft) readPersist(data []byte) {
 	d.Decode(&rf.currentTerm)
 	d.Decode(&rf.logs)
 	d.Decode(&rf.votedFor)
+}
+
+func (rf *Raft) Snapshot(index int, data []byte) {
+	// the tester calls Snapshot periodically
+
+	// here we should trim the log till index
+	// it's a tough one but let's give it a try
+	// we need to consider that after trimming the log it will be invalid to access it
+	// with the slice indices so we should find a way to it
+	// then we should implement InstallSnapshot RPC
+	// now first things first the main goal is to take a snapshot so that 2B and 2C tests still pass
 }
 
 // example RequestVote RPC arguments structure.
@@ -168,7 +187,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 }
 func (rf *Raft) getLastLogIndex() int {
 
-	return len(rf.logs) - 1
+	return rf.logs[len(rf.logs)-1].Index
 }
 func (rf *Raft) getLastLogTerm() int {
 
